@@ -4,6 +4,8 @@ Reads commits_ai_classified.csv and performs:
   4a - Basic statistics and sanity checks
   4b - Statistical hypothesis testing
   4c - Visualizations
+
+  Made by AI, not me
 """
 
 import pandas as pd
@@ -41,7 +43,7 @@ BUCKET_COLORS = {
 
 # LOAD DATA
 df = pd.read_csv(INPUT_CSV)
-df = df.dropna(subset=["time_bucket", "ai_urgency", "ai_sentiment"])
+df = df.dropna(subset=["time_bucket", "ai_urgency"])
 df = df[df["time_bucket"].isin(BUCKET_ORDER)]
 
 print(f"\nLoaded {len(df):,} commits\n")
@@ -79,9 +81,6 @@ print("\nCategory breakdown:")
 for cat, count in df["ai_category"].value_counts().items():
     print(f"  {cat:15s} {count:6,}  ({100*count/total:.1f}%)")
 
-print("\nSentiment breakdown:")
-for sent, count in df["ai_sentiment"].value_counts().items():
-    print(f"  {sent:15s} {count:6,}  ({100*count/total:.1f}%)")
 
 # 4B — STATISTICAL HYPOTHESIS TESTING
 print("\n4B — STATISTICAL HYPOTHESIS TESTING\n")
@@ -128,18 +127,6 @@ print("\n--- Binary Features (Chi-Square) ---")
 p_rushed   = chisquare(late_night, core_hours, "ai_rushed",  "Rushed Commits")
 p_hedging  = chisquare(late_night, core_hours, "ai_hedging", "Hedging Language")
 
-# Sentiment distribution comparison
-print("\n--- Sentiment Distribution (Chi-Square) ---")
-sent_cats  = ["negative", "neutral", "positive"]
-late_sent  = [len(late_night[late_night["ai_sentiment"] == s]) for s in sent_cats]
-core_sent  = [len(core_hours[core_hours["ai_sentiment"] == s]) for s in sent_cats]
-chi2, p_sent, _, _ = stats.chi2_contingency([late_sent, core_sent])
-sig = "SIGNIFICANT" if p_sent < 0.05 else "not significant"
-print(f"\n  Sentiment Distribution")
-print(f"    Late night:  neg={late_sent[0]} neu={late_sent[1]} pos={late_sent[2]}")
-print(f"    Core hours:  neg={core_sent[0]} neu={core_sent[1]} pos={core_sent[2]}")
-print(f"    p-value:     {p_sent:.4f}  {sig}")
-
 # Bonferroni correction
 bonferroni = 0.05 / 6
 print(f"\n--- Bonferroni Corrected Threshold: p < {bonferroni:.4f} ---")
@@ -149,7 +136,6 @@ all_results = {
     "Message Length":   p_msglen,
     "Rushed Commits":   p_rushed,
     "Hedging Language": p_hedging,
-    "Sentiment":        p_sent,
 }
 for test, p in all_results.items():
     status = "survives correction" if p < bonferroni else "❌ does not survive"
@@ -235,28 +221,6 @@ plt.savefig(f"{PLOTS_DIR}/4_rushed_by_bucket.png", dpi=150)
 plt.close()
 print(f"  Saved: 4_rushed_by_bucket.png")
 
-# Plot 5: Sentiment breakdown by time bucket
-print("  Plot 5: Sentiment by time bucket...")
-sent_pivot = plot_df.groupby(["time_bucket", "ai_sentiment"]).size().unstack(fill_value=0)
-sent_pivot = sent_pivot.reindex(BUCKET_ORDER).dropna()
-sent_pct   = sent_pivot.div(sent_pivot.sum(axis=1), axis=0) * 100
-
-fig, ax = plt.subplots(figsize=(12, 6))
-sent_pct[["negative", "neutral", "positive"]].plot(
-    kind="bar", ax=ax,
-    color=["#e74c3c", "#95a5a6", "#2ecc71"],
-    edgecolor="white", width=0.7
-)
-ax.set_xlabel("Time Bucket", fontsize=12)
-ax.set_ylabel("% of Commits", fontsize=12)
-ax.set_title("Sentiment Distribution by Time of Day", fontsize=14, fontweight="bold")
-ax.set_xticklabels(ax.get_xticklabels(), rotation=15, ha="right")
-ax.legend(title="Sentiment")
-plt.tight_layout()
-plt.savefig(f"{PLOTS_DIR}/5_sentiment_by_bucket.png", dpi=150)
-plt.close()
-print(f"  Saved: 5_sentiment_by_bucket.png")
-
 # Plot 6: Urgency heatmap by hour and day of week
 print("  Plot 6: Urgency heatmap by hour and day...")
 df["day_name"] = pd.to_datetime(df["utc_timestamp"]).dt.day_name()
@@ -285,5 +249,4 @@ print("  1_commit_activity_by_hour.png  — when do developers commit?")
 print("  2_urgency_by_bucket.png        — are late night commits more urgent?")
 print("  3_clarity_by_bucket.png        — are late night messages less clear?")
 print("  4_rushed_by_bucket.png         — are late night commits more rushed?")
-print("  5_sentiment_by_bucket.png      — sentiment breakdown by time")
-print("  6_urgency_heatmap.png          — urgency by hour AND day of week")
+print("  5_urgency_heatmap.png          — urgency by hour AND day of week")
