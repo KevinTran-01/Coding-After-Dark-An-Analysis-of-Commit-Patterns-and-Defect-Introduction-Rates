@@ -1,5 +1,5 @@
 """
-Use AI to analyze commit messages instead of keyword matching
+Use AI to analyze commit messages
 """
 import anthropic
 import pandas as pd
@@ -29,7 +29,6 @@ Each object in the array must have exactly these fields:
  
 {
   "urgency": <integer 0-10>,
-  "sentiment": <"negative" | "neutral" | "positive">,
   "category": <"bug_fix" | "feature" | "refactor" | "docs" | "test" | "chore" | "other">,
   "hedging": <true | false>,
   "clarity": <integer 0-10>,
@@ -38,7 +37,6 @@ Each object in the array must have exactly these fields:
  
 Field definitions:
 - urgency: 0=calm/routine, 10=extremely urgent/panicked
-- sentiment: overall emotional tone of the message
 - category: primary purpose of this commit
 - hedging: true if author seems uncertain (words like "should work", "hopefully", "might fix")
 - clarity: 0=cryptic/vague, 10=clear and descriptive
@@ -48,7 +46,7 @@ Field definitions:
 def buildprompt(messages):
     lines=[]
     for i, msg in enumerate(messages):
-        truncated = str(messages)[:400].replace("\n"," ").strip() #truncate message to take only 400 words max
+        truncated = str(messages)[:400].replace("\n"," ").strip() #truncate message to 400 max
         lines.append(f'{i+1}. "{truncated}"')
     
     joined = "\n".join(lines)
@@ -59,7 +57,7 @@ def classify_batch(messages):
     prompt = buildprompt(messages)
 
     response = client.messages.create(
-        model="claude-haiku-4-5-20251001",  # cheapest + fastest
+        model="claude-haiku-4-5-20251001",  # cheapest + fastest - I'm poor
         max_tokens=4096,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}]
@@ -100,7 +98,6 @@ for batch_num in range(batches):
             results.append({
                 "sha":          sha,
                 "ai_urgency":   c.get("urgency",   0),
-                "ai_sentiment": c.get("sentiment", "neutral"),
                 "ai_category":  c.get("category",  "other"),
                 "ai_hedging":   c.get("hedging",   False),
                 "ai_clarity":   c.get("clarity",   5),
@@ -126,7 +123,6 @@ for batch_num in range(batches):
                 results.append({
                     "sha":          sha,
                     "ai_urgency":   c.get("urgency",   0),
-                    "ai_sentiment": c.get("sentiment", "neutral"),
                     "ai_category":  c.get("category",  "other"),
                     "ai_hedging":   c.get("hedging",   False),
                     "ai_clarity":   c.get("clarity",   5),
@@ -139,14 +135,14 @@ for batch_num in range(batches):
             print(f"  Batch {batch_num+1} — retry failed: {e2} — skipping")
             continue
  
-# MERGE AND SAVE
+# Merge and Save
 print(f"\nMerging {len(results):,} classifications into dataset...")
  
 ai_df  = pd.DataFrame(results)
 df_out = df.merge(ai_df, on="sha", how="left")
 df_out.to_csv(OUTPUT_CSV, index=False, encoding="utf-8")
 
-# SUMMARY
+# Summary
 
 classified = df_out["ai_urgency"].notna().sum()
 print(f"\nDone. {classified:,} / {len(df_out):,} commits classified")
@@ -161,9 +157,3 @@ print(f"  Hedging commits:    {df_out['ai_hedging'].sum():,} ({df_out['ai_hedgin
 print("\nCategory breakdown:")
 for cat, count in df_out["ai_category"].value_counts().items():
     print(f"  {cat:15s} {count:6,}  ({100*count/len(df_out):.1f}%)")
- 
-print("\nSentiment breakdown:")
-for sent, count in df_out["ai_sentiment"].value_counts().items():
-    print(f"  {sent:15s} {count:6,}  ({100*count/len(df_out):.1f}%)")
- 
-print(f"\nNext step: update INPUT_CSV in 4_analyze.py to '{OUTPUT_CSV}' and re-run")
