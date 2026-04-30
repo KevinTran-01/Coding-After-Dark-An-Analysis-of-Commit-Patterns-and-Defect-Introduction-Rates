@@ -37,7 +37,7 @@ def mark_collected(repo_name):
 
 # Load repo list
 if not os.path.exists(REPOS_FILE):
-    print(f"ERROR: {REPOS_FILE} not found. Run 1_select_repos.py first.")
+    print(f"ERROR: {REPOS_FILE} not found.")
     exit()
 
 with open(REPOS_FILE) as f:
@@ -58,7 +58,7 @@ with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
             "sha",
             "author_name",
             "author_login",
-            "author_location",   # for timezone inference later
+            "author_location",   # for timezone inference
             "utc_timestamp",
             "utc_hour",          # 0-23, used for time bucket analysis
             "utc_day_of_week",   # 0=Monday, 6=Sunday
@@ -138,9 +138,9 @@ with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
 
                     count += 1
 
-                    # Print progress every 100 commits
+                    # update every 100 commits
                     if count % 100 == 0:
-                        print(f"  {count} commits collected...")
+                        print(f"  {count} commits collected")
 
                     time.sleep(0.1)  # avoid hammering the API
 
@@ -171,4 +171,4 @@ with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
         except Exception:
             pass
 
-print(f"\nAll done. Data saved to {OUTPUT_CSV}")
+print(f"\nData saved to {OUTPUT_CSV}")
