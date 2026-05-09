@@ -68,7 +68,7 @@ def classify_batch(messages):
     if raw.startswith("```"):
         raw = raw.split("```")[1]          # remove opening fence
         if raw.startswith("json"):
-            raw = raw[4:]                  # remove the word "json"
+            raw = raw[4:]                  # remove word "json"
     raw = raw.strip()
 
     # Parse JSON response
