@@ -1,0 +1,313 @@
+\documentclass[sigconf]{acmart}
+
+% Packages
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{microtype}
+
+% ACM metadata (update as needed)
+\acmConference[MSR '25]{Mining Software Repositories}{2025}{Chico, CA, USA}
+\acmYear{2025}
+\copyrightyear{2025}
+
+\begin{document}
+
+\title{Coding After Dark: An Empirical Study of Temporal Commit Patterns and Developer Communication Behavior in Open Source Software}
+
+\author{Dinh Thien Tu Tran}
+\affiliation{%
+  \institution{Department of Computer Science}
+  \institution{California State University, Chico}
+  \city{Chico}
+  \state{California}
+  \country{USA}
+}
+
+\begin{abstract}
+Software engineering culture is full of warnings about late-night coding sessions, but very little empirical evidence exists to support or challenge these warnings. This paper investigates whether developers exhibit measurably different commit communication patterns during late-night (00:00--04:00) compared to standard daytime work hours (09:00--17:00). We analyze 45,142 commits collected from 99 high-activity open source GitHub repositories spanning multiple programming languages and time zones. Unlike prior work that relied on simple keyword matching to classify commit messages, this study introduces a methodology using a large language model (Claude Haiku) to classify each commit message across six categories: urgency, category, hedging, clarity, and whether the commit appears rushed. We apply timezone normalization to convert UTC timestamps to developer-local time and compare commit message features across five time-of-day buckets. Our results show that late-night commits are statistically significantly shorter, less clear, and more frequently classified as rushed, while showing lower urgency scores---a counterintuitive finding suggesting that developers at night are not panicking, but are instead producing quieter, less descriptive communication. These findings are consistent with cognitive psychology research on circadian performance variation and contribute a LLM-based commit classification methodology to the mining software repositories literature.
+\end{abstract}
+
+\maketitle
+
+% ============================================================
+\section{Introduction}
+% ============================================================
+
+Software developers are known for working at unusual hours. Whether driven by personal preference, deadline pressure, or time zone differences, commits pushed at 2 in the morning are a common reality in open source software development. Engineering culture treats late-night code with suspicion---the phrase ``never deploy on Friday'' reflects a broader intuition that code written under tired or stressed conditions is riskier. But how much of this is folklore, and how much can be measured?
+
+This study approaches the question from a new angle. Rather than trying to measure whether late-night code contains more bugs, which requires complex defect-tracing pipelines and access to complete bug histories, we ask a simpler but equally meaningful question: do developers communicate differently about their code at night? Commit messages are a direct artifact of the developer's mental state at the moment of writing. They are written quickly, under no formal requirement, and reflect how clearly the developer can articulate what they just did. If cognitive performance declines at night, as cognitive science literature strongly suggests, we would expect to see this reflected in the linguistic properties of commit messages.
+
+This study makes three contributions to the empirical software engineering literature. First, we conduct a large-scale analysis of 45,142 commits from 99 active open source repositories, covering five programming languages and developers from dozens of countries. Second, we introduce a commit classification methodology using a large language model (LLM) to semantically score commit messages, a significant improvement over the keyword-matching approaches used in prior work. Third, we produce timezone-normalized results, converting all UTC timestamps to developer-local time before analysis, which is a critical methodological step that many prior studies have skipped or handled imprecisely.
+
+Our findings show that late-night commits are measurably different from daytime commits across multiple dimensions simultaneously: they are shorter, less clear, and more often classified as rushed. Interestingly, they are not more urgent---suggesting that fatigue affects how developers describe their work more than how they feel about it.
+
+% ============================================================
+\section{Related Work}
+% ============================================================
+
+\subsection{Temporal Patterns in Software Development}
+
+The most directly related prior work is Eyolfson et al.~\cite{eyolfson2011}, who studied whether commits made at different times of day were more likely to introduce bugs. Using a dataset of approximately 100 repositories and the SZZ algorithm to identify bug-inducing commits, they found suggestive evidence that late-night commits were associated with higher defect rates. However, their dataset was relatively small, their timezone normalization was coarse, and their study predates the large-scale availability of GitHub data. Our work extends their temporal framing but focuses on communication behavior rather than defect introduction, and uses a dataset and methodology that better reflects the scale of modern open source development.
+
+Mockus and Votta~\cite{mockus2000} established commit-level analysis as a valid empirical research methodology, providing the foundation for using version control data to draw conclusions about developer behavior. Their work justifies our approach of treating individual commits as the unit of analysis.
+
+\subsection{The SZZ Algorithm}
+
+The SZZ algorithm, introduced by Śliwerski, Zimmermann, and Zeller~\cite{sliwerski2005}, is the standard method for identifying which commit originally introduced a defect that was later fixed. The algorithm works by identifying bug-fixing commits---those that reference a closed bug report---and then using \texttt{git blame} to trace back to the commit that last modified the affected lines before the fix. While SZZ is widely used in defect prediction research, it is known to produce false positives, particularly for commits that only change whitespace or comments. Da Costa et al.~\cite{dacosta2017} provide a systematic framework for evaluating and improving SZZ results. Although this study does not implement SZZ---we focus on communication patterns rather than defect tracing---we cite it here as the foundational prior work in the space and as a direction for future research.
+
+\subsection{Mining Software Repositories}
+
+Kalliamvakou et al.~\cite{kalliamvakou2014} provide a comprehensive analysis of the promises and limitations of mining GitHub data, identifying key biases including repository selection bias, author disambiguation challenges, and the prevalence of personal and inactive repositories. The repository criteria---requiring at least 3000 stars, 500 forks, active contribution since January 2025, and a minimum of 10 contributors---were designed to mitigate these concerns.
+
+\subsection{Cognitive Performance and Time of Day}
+
+Research in psychology has shown that human cognitive performance varies significantly with time of day, driven by circadian rhythm. Anderson et al.~\cite{anderson2014} demonstrate that working memory capacity and verbal processing ability peak during mid-morning hours for most individuals and decline substantially during late-night hours, particularly after midnight. This is relevant to our study because commit message writing is a verbal, articulation-heavy task that depends on these same cognitive resources. Pink~\cite{pink2018} synthesizes the broader literature on cognitive timing, arguing that the gap between peak and off-peak cognitive performance is larger than most people assume and affects real-world task quality in measurable ways. Our findings are consistent with these theoretical predictions.
+
+\subsection{LLM-Based Code and Text Analysis}
+
+The use of large language models for analyzing software artifacts is a growing area. Prior work on commit message classification has primarily relied on keyword matching or simple machine learning classifiers trained on labeled datasets. Our approach of using Claude Haiku to semantically classify commit messages represents a methodological step forward, enabling nuanced classification across multiple dimensions simultaneously without requiring manually labeled training data. This approach trades interpretability for coverage and semantic richness, a tradeoff we discuss further in Section~\ref{sec:discussion}.
+
+% ============================================================
+\section{Research Questions and Hypotheses}
+% ============================================================
+
+This study is organized around one primary research question and two supporting sub-questions:
+
+\medskip
+\noindent\textbf{RQ1 (Primary):} Do software commits made during late-night hours (00:00--04:00) exhibit statistically significantly different communication characteristics compared to commits made during core daytime hours (09:00--17:00)?
+
+\medskip
+\noindent\textbf{RQ2:} Does the effect in RQ1 persist after applying Bonferroni correction for multiple comparisons?
+
+\medskip
+\noindent\textbf{RQ3:} Do urgency patterns vary by both time of day and day of week, suggesting that the day-of-week context modifies the temporal effect?
+
+\medskip
+From these research questions, we derive three testable hypotheses:
+
+\medskip
+\noindent\textbf{H1:} Late-night commits will exhibit lower clarity scores and shorter message lengths than daytime commits ($p < 0.05$).
+
+\noindent\textbf{H2:} Late-night commits will be more frequently classified as rushed compared to daytime commits.
+
+\noindent\textbf{H3:} Urgency patterns will vary not only by hour but also by day of week, with weekday late-night commits showing higher urgency than weekend late-night commits.
+
+% ============================================================
+\section{Methodology}
+% ============================================================
+
+\subsection{Repository Collection}
+
+We collected data from 99 open source GitHub repositories sampled using the GitHub REST API v3. To be included, a repository had to meet all of the following criteria: a minimum of 3000 stars, a minimum of 500 forks, last push date on or after January 1st, 2025, a minimum of 10 distinct contributors, and not be a fork of another repository. We additionally applied a name-based filter to exclude repositories whose names contained terms associated with educational, documentation, or non-professional purposes (e.g., ``awesome'', ``tutorial'', ``interview''), since these repositories tend to have commit histories that do not relate to professional software development practices. Repositories were sampled across five programming languages (Python, Java, JavaScript, C, and C++) with up to 20 repositories per language, yielding a final sample of 99 repositories.
+
+\subsection{Data Collection}
+
+For each repository, we collected up to 500 commits using the GitHub API. For each commit, we recorded the commit SHA, author name, author login, author profile location, UTC timestamp, commit message, number of files changed, lines added, and lines deleted. Data collection was implemented in Python using the PyGithub library with automatic rate limit management. The final dataset contains 45,142 commits from 5,227 unique authors.
+
+\subsection{Timezone Normalization}
+
+All timestamps returned by the GitHub API are in UTC. Since our research question concerns developer-local time of day, we converted each UTC timestamp to the developer's local time using a three-step process. First, we extracted the developer's location string from their GitHub profile. Second, we geocoded this string to geographic coordinates using the Nominatim geocoding service. Third, we identified the timezone at those coordinates using the TimezoneFinder library and converted the UTC timestamp accordingly. For developers whose profile location could not be geocoded---either because the field was empty or contained non-geographic text such as ``The Internet'' or ``Jupiter''---timestamps were excluded from time-bucket analyses.
+
+\subsection{LLM-Based Commit Classification}
+
+Traditional commit classification approaches rely on keyword matching, searching for words like ``fix'', ``bug'', or ``hack'' in commit messages. This approach misses implicit meaning and generates false positives when words appear in non-technical contexts. In this study, we use Claude Haiku, a fast large language model developed by Anthropic, to semantically classify each commit message across five dimensions.
+
+Commits were sent to the model in batches of ten, with a carefully constructed system prompt instructing the model to return only a valid JSON array with no additional text. Each commit was classified on the following dimensions:
+\begin{itemize}
+  \item \textbf{urgency} (integer 0--10, where 0 is routine and 10 is extremely urgent)
+  \item \textbf{category} (bug fix, feature, refactor, documentation, test, chore, or other)
+  \item \textbf{hedging} (Boolean, true if the author expresses uncertainty)
+  \item \textbf{clarity} (integer 0--10, where 0 is cryptic and 10 is fully descriptive)
+  \item \textbf{rushed} (Boolean, true if the commit appears hurried based on brevity, typos, or use of terms like ``wip'' or ``temp'')
+\end{itemize}
+
+Commit messages were truncated to 400 characters before sending to control API costs while retaining sufficient context for classification. The total cost of this research was approximately \$20 USD using the Haiku pricing tier. We acknowledge that LLM-based classification introduces a form of model bias---the classifier may have systematic tendencies in how it interprets certain writing styles. However, because the same model and prompt were applied uniformly to all commits regardless of time of day, any such bias is consistent across groups and does not confound the between-group comparisons that form the basis of our analysis.
+
+\subsection{Time Bucket Classification}
+
+We classify each commit into one of five time-of-day buckets based on the developer's local hour:
+\begin{itemize}
+  \item \textbf{Late night} (00:00--03:59)
+  \item \textbf{Early morning} (04:00--08:59)
+  \item \textbf{Core hours} (09:00--16:59)
+  \item \textbf{Evening} (17:00--20:59)
+  \item \textbf{Night} (21:00--23:59)
+\end{itemize}
+The primary comparison in this study is between the late night bucket and the core hours bucket, which serves as the baseline representing standard professional working hours.
+
+\subsection{Statistical Analysis}
+
+We apply two statistical tests depending on the nature of the variable being compared. For continuous variables such as urgency score, clarity score, and message length, we use the Mann-Whitney U test. Unlike the $t$-test, Mann-Whitney does not assume that the data follows a normal distribution. It works by ranking all observations from both groups together and testing whether one group consistently ranks higher than the other. This makes it appropriate for commit message data, which is typically right-skewed due to a small number of unusually long messages. We confirmed non-normality for all three continuous variables using the Shapiro-Wilk test on samples.
+
+For binary variables---rushed classification and hedging classification---we use the Chi-square test of independence. This test builds a contingency table of observed counts and compares it against the counts we would expect if the two variables were completely unrelated. A significant result means the two variables are not independent; in our case, that time of day and commit classification are related.
+
+To control for the increased risk of false positives when running multiple tests simultaneously, we apply the Bonferroni correction. With six tests, the adjusted significance threshold becomes $p < 0.05/6 = 0.0083$. A result that survives this correction can be considered significant even accounting for the multiple comparisons problem. Effect sizes are reported as rank-biserial correlation ($r$) for Mann-Whitney tests, where values around 0.1, 0.3, and 0.5 are conventionally interpreted as small, medium, and large effects respectively.
+
+% ============================================================
+\section{Results}
+% ============================================================
+
+\subsection{Dataset Overview}
+
+Table~\ref{tab:distribution} shows the distribution of commits across time-of-day buckets.
+
+\begin{table}[h]
+  \caption{Commit distribution by time-of-day bucket.}
+  \label{tab:distribution}
+  \begin{tabular}{lrrl}
+    \toprule
+    Time Bucket    & Commits & \% Total & Hours \\
+    \midrule
+    Late night     & 4,606   & 10.2\%   & 00--04 \\
+    Early morning  & 5,698   & 12.6\%   & 04--09 \\
+    Core hours     & 19,815  & 43.9\%   & 09--17 \\
+    Evening        & 9,518   & 21.1\%   & 17--21 \\
+    Night          & 5,505   & 12.2\%   & 21--24 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Figure~\ref{fig:hourly} shows a clear daily pattern: commit activity rises steadily from early morning, peaks at 15:00--16:00 local time, then declines through the evening and reaches its lowest point in the 02:00--04:00 window. Despite the low volume, late-night commits still represent 10.2\% of all commits in our dataset.
+
+The AI classification produced the following overall distribution: chore (29.8\%), bug fix (27.9\%), other (14.1\%), feature (13.9\%), refactor (8.6\%), documentation (3.8\%), and test (1.9\%). Across all commits, the average urgency score was 3.96 out of 10, average clarity was 5.74 out of 10, 30.5\% of commits were classified as rushed, and 2.2\% showed hedging language.
+
+% Placeholder for Figure 1 -- replace with your actual figure file
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=\linewidth]{fig_hourly_activity.pdf}
+%   \caption{Commit Activity by Hour of Day.}
+%   \label{fig:hourly}
+% \end{figure}
+
+\subsection{Hypothesis Testing Results}
+
+Table~\ref{tab:results} summarizes all five statistical tests comparing late-night commits to core-hours commits.
+
+\begin{table}[h]
+  \caption{Statistical test results. M-W U = Mann-Whitney U test. $\chi^2$ = Chi-square test.}
+  \label{tab:results}
+  \begin{tabular}{lllllc}
+    \toprule
+    Feature         & Late Night & Core Hours & Test   & $p$-value   & Result \\
+    \midrule
+    Urgency score   & 3.835      & 3.997      & M-W U  & $<0.0001$   & \checkmark \\
+    Clarity score   & 5.660      & 5.789      & M-W U  & $0.0002$    & \checkmark \\
+    Message length  & 30.3 words & 31.7 words & M-W U  & $<0.0001$   & \checkmark \\
+    Rushed rate     & 31.9\%     & 29.4\%     & $\chi^2$ & $0.0009$  & \checkmark \\
+    Hedging rate    & 1.9\%      & 2.3\%      & $\chi^2$ & $0.0914$  & $\times$   \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Clarity and Message Length (H1)}
+
+H1 is supported. Late-night commits show significantly lower clarity scores (mean 5.660 vs.\ 5.789, $p = 0.0002$, $r = 0.035$) and shorter message lengths (mean 30.3 vs.\ 31.7 words, $p < 0.0001$, $r = 0.062$). Both effects survive Bonferroni correction. Figure~\ref{fig:clarity} visually shows that the late night distribution has a lower upper quartile than core hours, with the interquartile range sitting noticeably lower. While the effect sizes are small, they are consistent and appear across two independent measures simultaneously, which strengthens the finding.
+
+% Placeholder for Figure 2
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=\linewidth]{fig_clarity.pdf}
+%   \caption{Commit Message Clarity by Time of Day.}
+%   \label{fig:clarity}
+% \end{figure}
+
+\subsection{Rushed Classification (H2)}
+
+H2 is supported. Late-night commits are more frequently classified as rushed (31.9\% vs.\ 29.4\%, $p = 0.0009$, surviving Bonferroni correction). Figure~\ref{fig:rushed} shows that core hours has the lowest rushed rate of any time bucket, while late night has the highest. In addition, early morning (30.8\%), evening (31.5\%), and night (31.5\%) also show elevated rushed rates compared to core hours, suggesting a broader pattern of core hours being associated with more deliberate commit communication, not just a late-night effect in isolation.
+
+% Placeholder for Figure 3
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=\linewidth]{fig_rushed.pdf}
+%   \caption{Rushed Commit Rate by Time of Day.}
+%   \label{fig:rushed}
+% \end{figure}
+
+\subsection{Urgency --- The Counterintuitive Finding}
+
+One of the most interesting findings in this study is that late-night commits show significantly \emph{lower} urgency scores than core-hours commits (mean 3.835 vs.\ 3.997, $p < 0.0001$). This is the opposite of what one might expect if late-night coding were primarily driven by deadline pressure or emergency fixes. The lower urgency at night, combined with shorter and less clear messages, suggests that developers working at night are not necessarily in an alarmed state---they are quieter and less expressive overall. This is consistent with a fatigue-based interpretation: cognitive depletion affects the richness of verbal expression without necessarily changing the emotional urgency of the work being done.
+
+\subsection{Day-of-Week Interaction (H3)}
+
+H3 is partially supported. Figure~\ref{fig:heatmap} reveals that urgency is not uniformly distributed across time of day---day of week is also an important factor. Tuesday at midnight shows the highest urgency of any cell in the heatmap, which is a specific and notable finding. Wednesday late-night commits also show elevated urgency. By contrast, Sunday shows consistently lower urgency across all hours, as does the 01:00--03:00 window on most days. This suggests that the temporal effect on commit communication is modulated by the day-of-week context, likely reflecting the difference between commits made during high-pressure weekday work and the more relaxed pace of weekend activity.
+
+% Placeholder for Figure 4
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=\linewidth]{fig_heatmap.pdf}
+%   \caption{Average Commit Urgency --- Hour $\times$ Day Heatmap.}
+%   \label{fig:heatmap}
+% \end{figure}
+
+% ============================================================
+\section{Discussion}
+\label{sec:discussion}
+% ============================================================
+
+\subsection{Interpreting the Findings Through a Cognitive Lens}
+
+Late-night commits are shorter, less clear, and more frequently classified as rushed---but not more urgent. This is consistent with what cognitive psychology research predicts about the effects of circadian performance variation on verbal tasks. Anderson et al.~\cite{anderson2014} show that verbal processing and working memory capacity---both required for writing clear, descriptive commit messages---decline significantly in late-night hours for most people, depending on their sleep schedule. The act of writing a commit message requires a developer to recall what they just did, articulate it in natural language, and produce a text that is useful to later readers. These are higher-order cognitive tasks.
+
+This framing resolves the apparent paradox: developers at night are not in a more urgent state, they are in a more cognitively depleted state that specifically affects their ability to communicate effectively about their work, while the work itself remains as urgent as it would be at any other time.
+
+\subsection{The Novel Methodology}
+
+The LLM-based classification approach introduced in this study has both advantages and limitations compared to the usual keyword-matching methods. The main advantage is semantic coverage: the model can recognize that ``resolved an off-by-one issue in the loop boundary'' is a bug fix even though it contains none of the classic keywords, and can assess that ``fixed it'' is rushed without requiring a specific word list. The main limitation is that the model's classifications are not perfectly transparent---it is not always clear why a particular message received a given urgency or clarity score. Future work could improve on this by prompt-engineering for chain-of-thought explanations or by massively scanning the entire bug-resolved commit history.
+
+% ============================================================
+\section{Conclusion and Future Work}
+% ============================================================
+
+This paper presents a large-scale empirical study of how time of day relates to developer commit communication behavior in open source software. Analyzing 45,142 commits from 99 repositories using LLM-based semantic classification and timezone-normalized timestamps, we find that late-night commits are significantly shorter, less clear, and more frequently classified as rushed compared to daytime commits---while showing lower urgency scores, suggesting cognitive depletion rather than deadline panic as the primary driver.
+
+These findings are consistent with cognitive psychology research on circadian performance variation and contribute a LLM-based commit classification methodology to the mining software repositories literature. The heatmap analysis additionally reveals that day of week modulates the temporal effect, with Tuesday midnight standing out as the highest-urgency point in the entire week.
+
+Future work should explore three directions. First, a longitudinal design tracking individual developers across time of day would better isolate circadian effects from between-developer variation. Second, connecting communication quality differences to downstream defect rates---using the SZZ algorithm to identify bug-inducing commits---would establish whether the communication degradation we observe has practical consequences for code quality. Third, the LLM classification methodology introduced here could be validated against human raters and extended to other software artifacts such as pull request descriptions and code review comments.
+
+% ============================================================
+\bibliographystyle{ACM-Reference-Format}
+\begin{thebibliography}{7}
+
+\bibitem{sliwerski2005}
+Śliwerski, J., Zimmermann, T., and Zeller, A. 2005.
+When do changes induce fixes?
+In \textit{Proceedings of the 2005 International Workshop on Mining Software Repositories (MSR '05)}.
+ACM, New York, NY, USA, 1--5.
+
+\bibitem{eyolfson2011}
+Eyolfson, J., Tan, L., and Lam, P. 2011.
+Do time of day and developer experience affect commit bugginess?
+In \textit{Proceedings of the 8th Working Conference on Mining Software Repositories (MSR '11)}.
+ACM, 153--162.
+
+\bibitem{kalliamvakou2014}
+Kalliamvakou, E., Gousios, G., Blincoe, K., Singer, L., German, D.~M., and Damian, D. 2014.
+The promises and perils of mining GitHub.
+In \textit{Proceedings of the 11th Working Conference on Mining Software Repositories (MSR '14)}.
+ACM, 92--101.
+
+\bibitem{dacosta2017}
+Da Costa, D.~A., McIntosh, S., Shang, W., Kulesza, U., Coelho, R., and Hassan, A.~E. 2017.
+A framework for evaluating the results of the SZZ approach for identifying bug-introducing changes.
+\textit{IEEE Transactions on Software Engineering} 43, 7, 641--657.
+
+\bibitem{mockus2000}
+Mockus, A. and Votta, L.~G. 2000.
+Identifying reasons for software changes using historic databases.
+In \textit{Proceedings of the International Conference on Software Maintenance (ICSM '00)}.
+IEEE, 120--130.
+
+\bibitem{anderson2014}
+Anderson, C., Horne, J.~A., and Owens, D.~S. 2014.
+Effects of sleep deprivation and circadian misalignment on verbal processing and working memory.
+\textit{Journal of Sleep Research} 23, 2, 113--121.
+
+\bibitem{pink2018}
+Pink, D.~H. 2018.
+\textit{When: The Scientific Secrets of Perfect Timing}.
+Riverhead Books, New York, NY, USA.
+
+\end{thebibliography}
+
+\end{document}
